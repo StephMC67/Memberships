@@ -22,9 +22,6 @@
             </div>
             <div class="navbar-collapse collapse">
                 <ul class="nav navbar-nav">
-                    <li>@Html.ActionLink("Accueil", "Index", "Home")</li>
-                    <li>@Html.ActionLink("À propos de", "About", "Home")</li>
-                    <li>@Html.ActionLink("Contact", "Contact", "Home")</li>
                     @Html.Partial("_AdminMenuPartial")
                 </ul>
                 @Html.Partial("_LoginPartial")
@@ -41,7 +38,6 @@
 
     @Scripts.Render("~/bundles/jquery")
     @Scripts.Render("~/bundles/bootstrap")
-
     @*appel de l'ouverture du bundle admin qui contient du script special*@
     @Scripts.Render("~/bundles/admin")
     @RenderSection("scripts", required: false)

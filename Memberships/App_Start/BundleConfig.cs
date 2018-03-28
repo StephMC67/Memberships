@@ -26,6 +26,12 @@ namespace Memberships
             bundles.Add(new StyleBundle("~/Content/css").Include(
                       "~/Content/bootstrap.css",
                       "~/Content/site.css"));
+
+            // creation d'un ensemble aapelé Admin qui reference le fichier
+            // javascript pour la surcharge de "over" du menu "Admin"
+            bundles.Add(new ScriptBundle("~/Bundles/admin").Include(
+                      "~/Scripts/AdminMenu.js"));
+
         }
     }
 }
