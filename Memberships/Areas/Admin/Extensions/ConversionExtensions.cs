@@ -4,10 +4,12 @@ using System.Collections.Generic;
 using System.Data.Entity;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Transactions;
 using System.Web;
 using Memberships.Areas.Admin.Models;
 using Memberships.Entities;
 using Memberships.Models;
+
 
 namespace Memberships.Areas.Admin.Extensions
 {
@@ -67,7 +69,7 @@ namespace Memberships.Areas.Admin.Extensions
                 ProductLinkTexts = new List<ProductLinkText>() { text },    // liste initialisée immédiatement
                 ProductTypes = new List<ProductType>() { type }          // liste initialisée immédiatement
             };
-            
+
             // ajout des textes dans les listes correspondantes si utilisation de liste vide
             //model.ProductLinkTexts.Add(text);
             //model.ProductTypes.Add(type);
@@ -75,5 +77,106 @@ namespace Memberships.Areas.Admin.Extensions
 
         }
 
+        // fonction de conversion d'une collection Product vers ProductModel
+        //   ProductModel = Product + liste des productLinkText et liste productTypes.
+        public static async Task<IEnumerable<ProductItemModel>> Convert(
+            this IQueryable<ProductItem> productItems,
+            ApplicationDbContext db)
+        {
+            // Iqueryable car requete double sur la base dans la meme requete
+            if (productItems.Count().Equals(0))
+                return new List<ProductItemModel>();
+
+            return await (from pi in productItems
+                          select new ProductItemModel
+                          {
+                              ItemId = pi.ItemId,
+                              ProductId = pi.ProductId,
+                              ItemTitle = db.Items.FirstOrDefault(i => i.Id.Equals(pi.ItemId)).Title,
+                              ProductTitle = db.Products.FirstOrDefault(p => p.Id.Equals(pi.ProductId)).Title
+                          }).ToListAsync();
+
+        }
+
+
+        // fonction de conversion d'un objet ProductItem vers ProductItemModel
+        public static async Task<ProductItemModel> Convert(
+            this ProductItem productitem,
+            ApplicationDbContext db,
+            bool addListData = true)
+        {
+
+            var model = new ProductItemModel
+            {
+                ItemId = productitem.ItemId,
+                ProductId = productitem.ProductId,
+
+                Items = addListData ? await db.Items.ToListAsync() : null,
+                Products = addListData ?  await db.Products.ToListAsync() : null,
+                ItemTitle = (db.Items.FirstOrDefault(i => i.Id.Equals(productitem.ItemId))).Title,
+                ProductTitle = (db.Products.FirstOrDefault(p => p.Id.Equals(productitem.ProductId))).Title,
+
+            };
+
+            return model;
+
+        }
+
+
+        public static async Task<bool> CanChange(this ProductItem productItem, ApplicationDbContext db)
+        {
+            var oldPI = await db.ProductItems.CountAsync(pi =>
+                pi.ProductId.Equals(productItem.OldProductId) &&
+                pi.ItemId.Equals(productItem.OldItemId));
+
+            var newPI = await db.ProductItems.CountAsync(pi =>
+                pi.ProductId.Equals(productItem.ProductId) &&
+                pi.ItemId.Equals(productItem.ItemId));
+
+            // ancienne valeur doit exister une fois et la nouvelle valeur ne doit pas exister
+            // test fait sur le "comptage" des "paires" d'elements correspondant 
+            return (oldPI.Equals(1)) && (newPI.Equals(0));
+
+        }
+
+        public static async Task Change(this ProductItem productItem, ApplicationDbContext db)
+        {
+            var oldProductItem = await db.ProductItems.FirstOrDefaultAsync(pi =>
+               pi.ProductId.Equals(productItem.OldProductId) &&
+               pi.ItemId.Equals(productItem.OldItemId));
+
+            var newProductItem = await db.ProductItems.FirstOrDefaultAsync(pi =>
+               pi.ProductId.Equals(productItem.ProductId) &&
+               pi.ItemId.Equals(productItem.ItemId));
+
+            if (oldProductItem != null && newProductItem == null)
+            {
+                var newProductItem2 = new ProductItem
+                {
+                    ProductId = productItem.ProductId,
+                    ItemId = productItem.ItemId
+                };
+
+                // transaction : 
+                // - suppression ancien element
+                // - ajout du nouveau
+                using (var transaction = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled))
+                {
+                    try
+                    {
+                        db.ProductItems.Remove(oldProductItem);
+                        db.ProductItems.Add(newProductItem2);
+                        await db.SaveChangesAsync();
+                        transaction.Complete();
+                    }
+                    catch
+                    {
+                        transaction.Dispose(); // arrêt de la transaction et rollback
+                    }
+                }
+
+
+        }
     }
+}
 }
